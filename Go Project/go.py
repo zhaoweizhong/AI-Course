@@ -29,10 +29,37 @@ class AI(object):
         # ==================================================================
         # Write your algorithm here
         # Here is the simplest sample:Random decision
-        idx = np.where(chessboard == COLOR_NONE)
-        idx = list(zip(idx[0], idx[1]))
-        pos_idx = random.randint(0, len(idx)-1)
-        new_pos = idx[pos_idx]
+        indexes = np.where(chessboard == COLOR_NONE)
+        indexes = list(zip(indexes[0], indexes[1]))
+
+        chess_Value = [[0 for i in range(size+1)] for i in range(size+1)]
+        code = ""
+        dic = {"0": 0, "1": 8, "2": 10, "11": 50, "22": 1000, "111": 2500, "222": 3000, "1111": 5000, "2222": 10000,
+               "21": 4, "12": 2, "211": 25, "122": 20, "11112": 3000, "112": 30, "1112": 3000, "221": 500, "2221": 4000,
+               "22221": 10000}
+        chess_color = 0
+        for index in indexes:
+            for x in range(index[0] + 1, self.chessboard_size + 1):
+                if chessboard[x, index[1]] == COLOR_NONE:
+                    break
+                else:
+                    if chess_color == 0:
+                        code += str(chessboard[x, index[1]])
+                        chess_color = chessboard[x, index[1]]
+                    else:
+                        if chess_color == chessboard[x, index[1]]:
+                            code += str(chessboard[x, index[1]])
+                        else:
+                            code += str(chessboard[x, index[1]])
+                            break
+        value = dic.get(code)
+        if value:
+            chess_Value += value
+        code = ""
+        chess_color = 0
+
+        # pos_idx = random.randint(0, len(idx)-1)
+        # new_pos = idx[pos_idx]
         run_time = (time.time() - start)  # Time Calculation Stop
         # ==============Find new pos========================================
         # Make sure that the position of your decision in chess board is empty.
