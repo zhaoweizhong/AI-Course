@@ -8,7 +8,7 @@ check the security and functionability of uploaded code
 import imp
 import traceback
 import numpy as np
-from timeout_decorator import timeout
+
 
 FORBIDDEN_LIST = ['import os', 'exec']
 
@@ -20,7 +20,6 @@ class CodeCheck():
         self.chessboard_size = chessboard_size
         self.agent = None
         self.errormsg = 'Error'
-        self.errorcase = 0
         # sys.stdout = open(os.devnull, 'w')
         # sys.stderr = open(os.devnull, 'w')
         # print(self.chessboard)
@@ -41,7 +40,7 @@ class CodeCheck():
             self.errormsg = "Fail to init"
             return False
 
-        # check simple condition
+        # # check simple condition
         if not self.__check_simple_chessboard():
             self.errormsg = "Can not pass usability test."
             return False
@@ -67,21 +66,25 @@ class CodeCheck():
         self.agent = imp.load_source('AI', self.script_file_path).AI(
             self.chessboard_size, -1, self.time_out)
         try:
-            timeout(self.time_out)(self.agent.go)(np.copy(chessboard))
+            self.agent.go(np.copy(chessboard))
         except Exception:
             self.errormsg = "Error:" + traceback.format_exc()
+            print(self.errormsg)
             return False
         return True
 
     def __check_result(self, chessboard, result):
         if not self.__check_go(chessboard):
             return False
+        print(chessboard)
+        print(self.agent.candidate_list)
         if not self.agent.candidate_list or list(self.agent.candidate_list[-1]) not in result:
             return False
         return True
 
     def __check_simple_chessboard(self):
         # empty chessboard
+        print("This is Simple Test")
         if not self.__check_go(np.zeros((self.chessboard_size, self.chessboard_size), dtype=np.int)):
             return False
 
@@ -100,6 +103,7 @@ class CodeCheck():
 
     def __check_advance_chessboard(self):
         #
+        print("This is Advanced Test 1")
         chessboard = np.zeros((self.chessboard_size, self.chessboard_size), dtype=np.int)
         chessboard[2, 2] = 1
         chessboard[3, 3] = 1
@@ -114,6 +118,7 @@ class CodeCheck():
             return False
 
         #
+        print("This is Advanced Test 2")
         chessboard = np.zeros((self.chessboard_size, self.chessboard_size), dtype=np.int)
         chessboard[2, 2:4] = 1
         chessboard[4, 1:3] = 1
@@ -125,6 +130,7 @@ class CodeCheck():
             return False
 
         #
+        print("This is Advanced Test 3")
         chessboard = np.zeros((self.chessboard_size, self.chessboard_size), dtype=np.int)
         chessboard[2, 2] = 1
         chessboard[2, 4] = 1
@@ -138,6 +144,7 @@ class CodeCheck():
             return False
 
         #
+        print("This is Advanced Test 4")
         chessboard = np.zeros((self.chessboard_size, self.chessboard_size), dtype=np.int)
         chessboard[2:5, 2] = 1
         chessboard[6, 3:5] = 1
@@ -149,6 +156,7 @@ class CodeCheck():
             return False
 
         #
+        print("This is Advanced Test 5")
         chessboard = np.zeros((self.chessboard_size, self.chessboard_size), dtype=np.int)
         chessboard[1, 3] = 1
         chessboard[2, 2] = 1

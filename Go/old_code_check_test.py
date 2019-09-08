@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-from code_check import CodeCheck
+from old_code_check import CodeCheck
 
 
 def main():
