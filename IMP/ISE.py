@@ -1,227 +1,229 @@
-import numpy as np
 import os
 import sys
-import multiprocessing
+import multiprocessing as mp
+from multiprocessing import Pool
+import time
+import numpy as np
+import random
+import argparse
 
-spd = None
+start_time = time.time()
+print("Start Time: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time)))
 
-
-def read_seed(path):
-    if os.path.exists(path):
-        f = open(path, 'r')
-        txt = f.readlines()
-        seeds = list()
-        for line in txt:
-            seeds.append(int(line))
-        return seeds
-
-
-def read_graph(path):
-    if os.path.exists(path):
-        parents = {}
-        children = {}
-        edges = {}
-        nodes = set()
-
-        f = open(path, 'r')
-        txt = f.readlines()
-        header = str.split(txt[0])
-        node_num = int(header[0])
-        edge_num = int(header[1])
-        for line in txt[1:]:
-            row = str.split(line)
-
-            src = int(row[0])
-            des = int(row[1])
-            nodes.add(src)
-            nodes.add(des)
-
-            if children.get(src) is None:
-                children[src] = []
-            if parents.get(des) is None:
-                parents[des] = []
-
-            weight = float(row[2])
-            edges[(src, des)] = weight
-            children[src].append(des)
-            parents[des].append(src)
-        return list(nodes), edges, children, parents, node_num, edge_num
+global_graph = None
+global_seeds = None
 
 
-def with_property(rate):
-    rand = np.random.ranf()
-    if rand <= rate:
-        return True
-    else:
-        return False
+class Worker(mp.Process):
+    def __init__(self):
+        super(Worker, self).__init__(target=self.start)
+        self.inQ = mp.Queue()
+        self.outQ = mp.Queue()
+
+    def run(self):
+        while True:
+            model, graph, seeds = self.inQ.get()
+            if model == 'IC':
+                self.outQ.put(solve_IC(graph, seeds))
+            elif model == 'LT':
+                self.outQ.put(solve_LT(graph, seeds))
+
+
+def create_worker(num):
+    '''
+    创建子进程备用
+    :param num: 多线程数量
+    '''
+    for i in range(num):
+        worker.append(Worker(mp.Queue(), mp.Queue(), np.random.randint(0, 10 ** 9)))
+        worker[i].start()
+
+
+def finish_worker():
+    '''
+    关闭所有子线程
+    '''
+    for w in worker:
+        w.terminate()
 
 
 class Graph:
-    nodes = None
-    edges = None
-    children = None
-    parents = None
-    node_num = None
-    edge_num = None
+    '''
+    Graph Class
+    '''
+    nodes_num = None
+    weight = None
+    parents_map = None
+    children_map = None
 
-    def __init__(self, lists):
-        self.nodes = lists[0]
-        self.edges = lists[1]
-        self.children = lists[2]
-        self.parents = lists[3]
-        self.node_num = lists[4]
-        self.edge_num = lists[5]
+    def __init__(self, nodes_num, weight, parents_map, children_map):
+        self.nodes_num = nodes_num
+        self.weight = weight
+        self.parents_map = parents_map
+        self.children_map = children_map
 
-    def get_child(self, node):
-        ch = self.children.get(node)
-        if ch is None:
-            self.children[node] = []
-        return self.children[node]
+    def get_weight(self, src_node, dst_node):
+        return self.weight[src_node][dst_node]
+
+    def get_children(self, node):
+        return self.children_map[node]
 
     def get_parents(self, node):
-        pa = self.parents.get(node)
-        if pa is None:
-            self.parents[node] = []
-        return self.parents[node]
-
-    def get_weight(self, src, dest):
-        weight = self.edges.get((src, dest))
-        if weight is None:
-            return 0
-        else:
-            return weight
-
-    def is_parent_of(self, node1, node2):
-        if self.get_weight(node1, node2) != 0:
-            return True
-        else:
-            return False
-
-    def is_child_of(self, node1, node2):
-        return self.is_parent_of(node2, node1)
-
-    def get_out_degree(self, node):
-        return len(self.get_child(node))
-
-    def get_in_degree(self, node):
-        return len(self.get_parents(node))
+        return self.parents_map[node]
 
 
-def isc_IC(graph, seeds, sample_num=10000):
-    influence = 0
-    for i in range(sample_num):
-        node_list = list()
-        node_list.extend(seeds)
-        checked = np.zeros(graph.node_num)
-        for node in node_list:
-            checked[node - 1] = 1
-        while len(node_list) != 0:
-            curr_node = node_list.pop(0)
-            influence = influence + 1
-            children = graph.get_child(curr_node)
-            for child in children:
-                if checked[child - 1] == 0:
-                    if with_property(graph.get_weight(curr_node, child)):
-                        checked[child - 1] = 1
-                        node_list.append(child)
-    return influence
+def load_graph(file_name):
+    '''
+    Load Graph data
+    '''
+    graph_file = open(file_name, 'r')
+    lines = graph_file.readlines()
+    graph_file.close()
+    nodes_num = int(str.split(lines[0])[0])
+    weight = np.zeros((nodes_num + 1, nodes_num + 1), dtype=np.float)
+    parents_map = [[] for i in range(nodes_num + 1)]
+    children_map = [[] for i in range(nodes_num + 1)]
+
+    for line in lines[1:]:
+        data = str.split(line)
+        src_node = int(data[0])
+        dst_node = int(data[1])
+        weight[src_node][dst_node] = float(data[2])
+        parents_map[dst_node].append(src_node)
+        children_map[src_node].append(dst_node)
+
+    return Graph(nodes_num, weight, parents_map, children_map)
 
 
-def isc_IC_m(graph, seeds, n=8):
-    pool = multiprocessing.Pool(processes=8)
-    results = []
-    sub = int(10000 / n)
-    for i in range(n):
-        result = pool.apply_async(isc_IC, args=(graph, seeds, sub))
-        results.append(result)
-    pool.close()
-    pool.join()
-    influence = 0
-    for result in results:
-        influence = influence + result.get()
-    return influence / 10000
+def load_seeds(file_name):
+    '''
+    Load Seeds data
+    '''
+    seeds_file = open(file_name, 'r')
+    lines = seeds_file.readlines()
+    seeds_file.close()
+    seeds = []
+
+    for line in lines:
+        seeds.append(int(line))
+
+    return seeds
 
 
-def forward(Q, D, spd, pp, r, W, U, spdW_u, graph):
-    x = Q[-1]
-    if U is None:
-        U = []
-    children = graph.get_child(x)
-    count = 0
-    while True:
+def solve_IC(time_budget):
+    model_start_time = time.time()
 
-        for child in range(count, len(children)):
-            if (children[child] in W) and (children[child] not in Q) and (children[child] not in D[x]):
-                y = children[child]
-                break
-            count = count + 1
+    graph = global_graph
+    seeds = global_seeds
 
-        if count == len(children):
-            return Q, D, spd, pp
-
-        if pp * graph.get_weight(x, y) < r:
-            D[x].append(y)
-        else:
-            Q.append(y)
-            pp = pp * graph.get_weight(x, y)
-            spd = spd + pp
-            D[x].append(y)
-            x = Q[-1]
-            for v in U:
-                if v not in Q:
-                    spdW_u[v] = spdW_u[v] + pp
-            children = graph.get_child(x)
-            count = 0
-
-
-def trackback(u, r, W, U, spdW_, graph):
-    Q = [u]
-    spd = 1
-    pp = 1
-    D = init_D(graph)
-
-    while len(Q) != 0:
-        Q, D, spd, pp = forward(Q, D, spd, pp, r, W, U, spdW_, graph)
-        u = Q.pop()
-        D[u] = []
-        if len(Q) != 0:
-            v = Q[-1]
-            pp = pp / graph.get_weight(v, u)
-    return spd
+    result, count = 0, 0
+    while time.time() - model_start_time < time_budget - 3:
+        activity_set = seeds
+        res_count = len(activity_set)
+        activited = [False] * (graph.nodes_num + 1)
+        for node in activity_set:
+            activited[node] = True
+        while len(activity_set) != 0:
+            new_activity_set = []
+            for seed in activity_set:
+                children = graph.get_children(seed)
+                for child in children:
+                    if child not in activity_set and child not in new_activity_set and not activited[child]:
+                        random.seed(int(os.getpid() + time.time() * 1e5))
+                        rand = random.random()
+                        if rand <= graph.get_weight(seed, child):
+                            new_activity_set.append(child)
+                            activited[child] = True
+            res_count += len(new_activity_set)
+            activity_set = new_activity_set
+        result += res_count
+        count += 1
+    return result, count
 
 
-def simpath_spread(S, r, U, graph, spdW_=None):
-    spread = 0
-    W = set(graph.nodes).difference(S)
-    if U is None or spdW_ is None:
-        spdW_ = np.zeros(graph.node_num + 1)
-    for u in S:
-        W.add(u)
-        spread = spread + trackback(u, r, W, U, spdW_[u], graph)
-        W.remove(u)
-    return spread
+def solve_LT(time_budget):
+    model_start_time = time.time()
 
+    graph = global_graph
+    seeds = global_seeds
 
-def isc_LT(graph, seeds, r=0.01):
-    return simpath_spread(seeds, r, None, graph)
-
-
-def init_D(graph):
-    D = list()
-    for i in range(graph.node_num + 1):
-        D.append([])
-    return D
+    result, count = 0, 0
+    while time.time() - model_start_time < time_budget - 3:
+        activity_set = seeds
+        threshold = np.zeros(graph.nodes_num + 1, dtype=np.float)
+        activited = [False] * (graph.nodes_num + 1)
+        for i in range(1, graph.nodes_num + 1):
+            random.seed(int(os.getpid() + time.time() * 1e5))
+            threshold[i] = random.random()
+            if threshold[i] == 0.0:
+                activity_set.append(i)
+        res_count = len(activity_set)
+        while activity_set:
+            new_activity_set = []
+            for seed in activity_set:
+                activited[seed] = True
+                children = graph.get_children(seed)
+                for child in children:
+                    threshold[child] -= graph.get_weight(seed, child)
+            for seed in activity_set:
+                children = graph.get_children(seed)
+                for child in children:
+                    if not activited[child]:
+                        if threshold[child] < 0:
+                            new_activity_set.append(child)
+                            activited[child] = True
+            res_count += len(new_activity_set)
+            activity_set = new_activity_set
+        result += res_count
+        count += 1
+    return result, count
 
 
 if __name__ == '__main__':
-    graph_path = str(sys.argv[2])
-    seed_path = str(sys.argv[4])
-    model = str(sys.argv[6])
-    timeout = int(sys.argv[8])
+    '''
+    从命令行读参数
+    '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--file_name', type=str, default='network.txt')
+    parser.add_argument('-s', '--seed', type=str, default='seeds.txt')
+    parser.add_argument('-m', '--model', type=str, default='IC')
+    parser.add_argument('-t', '--time_limit', type=int, default=60)
 
-    graph = Graph(read_graph(graph_path))
-    seeds = read_seed(seed_path)
-    if model == 'IC':
-        print(isc_IC_m(seeds=seeds, graph=graph))
-    elif model == 'LT':
-        print(isc_LT(graph=graph, seeds=seeds, r=0.001))    
+    args = parser.parse_args()
+    file_name = args.file_name  # Network File
+    seed = args.seed  # Seeds File
+    model = args.model  # Model: LT or IC
+    time_limit = args.time_limit  # Time Limit, default 60s
+
+    graph = load_graph(file_name)  # Load Graph
+    seeds = load_seeds(seed)
+
+    global_graph = graph
+    global_seeds = seeds
+
+    worker = []
+    worker_num = 8
+    n = 500
+
+    random.seed(int(os.getpid() + time.time() * 1e5))
+
+    with Pool(worker_num) as p:
+        if model == 'IC':
+            res = p.map(solve_IC, [(time_limit - (time.time() - start_time)) for i in range(worker_num)])
+        elif model == 'LT':
+            res = p.map(solve_LT, [(time_limit - (time.time() - start_time)) for i in range(worker_num)])
+        result_sum = 0
+        count_sum = 0
+        for result, count in res:
+            result_sum += result
+            count_sum += count
+        print(result_sum / count_sum)
+
+    end_time = time.time()
+    print("End Time: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end_time)))
+    total_time = end_time - start_time
+    print("Total Time: " + str(total_time))
+    '''
+    程序结束后强制退出，跳过垃圾回收时间, 如果没有这个操作会额外需要几秒程序才能完全退出
+    '''
+    sys.stdout.flush()

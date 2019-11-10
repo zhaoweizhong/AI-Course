@@ -16,7 +16,7 @@ def test(_lambda, r, epoch, n):
 if __name__ == '__main__':
     random = np.random.RandomState(0)
     for i in range(1, 101):
-        print("************ start problem %d ************" % 12)
+        print("************ start problem ************")
         # r = round(random.uniform(1, 10), 3)
         epoch = i
         print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), end=' ')
